@@ -1,0 +1,1308 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Top-Down Shooter: Elite Assault</title>
+    <style>
+        body {
+            margin: 0;
+            background: #090b12;
+            color: #eef;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #gameCanvas {
+            display: block;
+            background: #101828;
+            cursor: crosshair;
+        }
+        #hud {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            z-index: 10;
+            color: #eef;
+            line-height: 1.5;
+            text-shadow: 0 0 10px rgba(0,0,0,0.8);
+        }
+        #instructions {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 10;
+            color: #bfc;
+            text-align: right;
+            line-height: 1.4;
+            text-shadow: 0 0 10px rgba(0,0,0,0.7);
+        }
+        #repeatButton {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            z-index: 10;
+            padding: 8px 16px;
+            background: #2a2a2a;
+            color: #eef;
+            border: 1px solid #555;
+            cursor: pointer;
+            font-size: 14px;
+            text-shadow: 0 0 5px rgba(0,0,0,0.8);
+        }
+        #repeatButton:hover {
+            background: #444;
+        }
+        #joystick-container {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 120px;
+            height: 120px;
+            z-index: 20;
+        }
+        #joystick-base {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.5);
+            touch-action: none;
+        }
+        #joystick-handle {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background: rgba(255,255,255,0.8);
+            border-radius: 50%;
+            top: 30px;
+            left: 30px;
+            transition: none;
+        }
+        #shoot-button {
+            position: fixed;
+            bottom: 20px;
+            right: 120px;
+            width: 80px;
+            height: 80px;
+            background: rgba(255,0,0,0.5);
+            border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 50%;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 20;
+            touch-action: none;
+        }
+        #shoot-button:active {
+            background: rgba(255,0,0,0.8);
+        }
+        .skill-button {
+            position: fixed;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            background: rgba(0,150,255,0.5);
+            border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 50%;
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 20;
+            touch-action: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+        .skill-button:active {
+            background: rgba(0,150,255,0.8);
+        }
+        #grenade-btn { bottom: 100px; }
+        #shield-btn { bottom: 170px; }
+        #time-slow-btn { bottom: 240px; }
+        #teleport-btn { bottom: 310px; }
+        #homing-btn { bottom: 380px; }
+    </style>
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="1024" height="640"></canvas>
+    <div id="hud"></div>
+    <div id="instructions">
+        WASD move<br>
+        Mouse aim<br>
+        Click shoot<br>
+        1-4 switch weapons<br>
+        R reload<br>
+        Q dash<br>
+        E grenade<br>
+        F shield<br>
+        G time slow<br>
+        V teleport<br>
+        C homing missile<br>
+        Loot drops and bosses
+    </div>
+    <div id="joystick-container">
+        <div id="joystick-base">
+            <div id="joystick-handle"></div>
+        </div>
+    </div>
+    <button id="shoot-button">SHOOT</button>
+    <button id="grenade-btn" class="skill-button">E<br>Grenade</button>
+    <button id="shield-btn" class="skill-button">F<br>Shield</button>
+    <button id="time-slow-btn" class="skill-button">G<br>Time Slow</button>
+    <button id="teleport-btn" class="skill-button">V<br>Teleport</button>
+    <button id="homing-btn" class="skill-button">C<br>Homing</button>
+    <button id="repeatButton">Repeat Game</button>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const hud = document.getElementById('hud');
+        const W = canvas.width;
+        const H = canvas.height;
+        const joystickBase = document.getElementById('joystick-base');
+        const joystickHandle = document.getElementById('joystick-handle');
+        const shootButton = document.getElementById('shoot-button');
+        const grenadeBtn = document.getElementById('grenade-btn');
+        const shieldBtn = document.getElementById('shield-btn');
+        const timeSlowBtn = document.getElementById('time-slow-btn');
+        const teleportBtn = document.getElementById('teleport-btn');
+        const homingBtn = document.getElementById('homing-btn');
+
+        const audio = { context: null, unlocked: false };
+        function unlockAudio() {
+            if (audio.unlocked) return;
+            try {
+                audio.context = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audio.context.createOscillator();
+                const gain = audio.context.createGain();
+                oscillator.connect(gain);
+                gain.connect(audio.context.destination);
+                oscillator.start(0);
+                gain.gain.setValueAtTime(0, audio.context.currentTime);
+                audio.unlocked = true;
+            } catch (e) {
+                audio.context = null;
+            }
+        }
+
+        function playSound(freq, duration = 0.06, type = 'sine', volume = 0.16) {
+            if (!audio.context) return;
+            const now = audio.context.currentTime;
+            const osc = audio.context.createOscillator();
+            const gain = audio.context.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, now);
+            gain.gain.setValueAtTime(volume, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+            osc.connect(gain);
+            gain.connect(audio.context.destination);
+            osc.start(now);
+            osc.stop(now + duration + 0.02);
+        }
+
+        function randomRange(min, max) {
+            return min + Math.random() * (max - min);
+        }
+
+        const weapons = [
+            { name: 'Pistol', color: '#74d0ff', fireRate: 0.26, speed: 660, damage: 26, clipSize: 12, clip: 12, reserve: 72, reload: 1.2, pattern: 1, spread: 0.02 },
+            { name: 'SMG', color: '#b4ff6b', fireRate: 0.11, speed: 700, damage: 16, clipSize: 30, clip: 30, reserve: 120, reload: 1.5, pattern: 1, spread: 0.04 },
+            { name: 'Shotgun', color: '#ff9d5a', fireRate: 0.82, speed: 520, damage: 10, clipSize: 6, clip: 6, reserve: 24, reload: 1.8, pattern: 7, spread: 0.18 },
+            { name: 'Rifle', color: '#ffd670', fireRate: 0.35, speed: 820, damage: 36, clipSize: 18, clip: 18, reserve: 60, reload: 1.6, pattern: 1, spread: 0.008 }
+        ];
+
+        const player = {
+            x: W / 2,
+            y: H / 2,
+            r: 16,
+            angle: 0,
+            speed: 240,
+            health: 100,
+            maxHealth: 100,
+            activeWeapon: 0,
+            fireCooldown: 0,
+            reloading: false,
+            reloadTimer: 0,
+            score: 0,
+            kills: 0,
+            level: 0,
+            levelProgress: 0,
+            dashing: false,
+            dashTimer: 0,
+            dashCharge: 3,
+            dashCooldown: 0,
+            dashAvailable: 3,
+            abilities: {
+                grenade: { ammo: 3, cooldown: 0, damage: 80, radius: 60 },
+                shield: { active: false, timer: 0, cooldown: 0, duration: 3 },
+                timeSlow: { active: false, timer: 0, cooldown: 0, duration: 4 },
+                teleport: { cooldown: 0, range: 120 },
+                homing: { ammo: 2, cooldown: 0, damage: 60, speed: 180 }
+            }
+        };
+
+        const keys = { w: false, a: false, s: false, d: false };
+        const mouse = { x: W / 2, y: H / 2, down: false };
+        let joystick = { active: false, x: 0, y: 0, baseX: 0, baseY: 0 };
+        const bullets = [];
+        const enemyBullets = [];
+        const enemies = [];
+        const pickups = [];
+        const particles = [];
+        const grenades = [];
+        const explosions = [];
+        const homingMissiles = [];
+        let obstacles = [];
+        let levelState = { wave: 1, timer: 0, bossActive: false, text: '', timeSlow: false };
+
+        const levels = [
+            {
+                name: 'Airfield Assault',
+                enemyCount: 12,
+                bossHealth: 140,
+                waveSize: 3,
+                background: '#151f31',
+                obstacles: [
+                    { x: 120, y: 96, w: 156, h: 24 },
+                    { x: 640, y: 48, w: 24, h: 176 },
+                    { x: 360, y: 320, w: 160, h: 24 }
+                ]
+            },
+            {
+                name: 'Warehouse Raid',
+                enemyCount: 18,
+                bossHealth: 200,
+                waveSize: 4,
+                background: '#18221b',
+                obstacles: [
+                    { x: 120, y: 120, w: 260, h: 24 },
+                    { x: 520, y: 220, w: 24, h: 280 },
+                    { x: 760, y: 420, w: 240, h: 24 }
+                ]
+            },
+            {
+                name: 'Command Center',
+                enemyCount: 24,
+                bossHealth: 260,
+                waveSize: 5,
+                background: '#200f20',
+                obstacles: [
+                    { x: 220, y: 88, w: 24, h: 220 },
+                    { x: 440, y: 260, w: 200, h: 24 },
+                    { x: 760, y: 96, w: 24, h: 224 },
+                    { x: 560, y: 460, w: 300, h: 24 }
+                ]
+            },
+            {
+                name: 'Datacore Extraction',
+                enemyCount: 30,
+                bossHealth: 330,
+                waveSize: 6,
+                background: '#1a1c28',
+                obstacles: [
+                    { x: 100, y: 140, w: 280, h: 24 },
+                    { x: 420, y: 96, w: 24, h: 300 },
+                    { x: 700, y: 320, w: 240, h: 24 },
+                    { x: 520, y: 456, w: 24, h: 120 }
+                ]
+            },
+            {
+                name: 'Final Stronghold',
+                enemyCount: 34,
+                bossHealth: 420,
+                waveSize: 6,
+                background: '#170d1d',
+                obstacles: [
+                    { x: 180, y: 120, w: 220, h: 24 },
+                    { x: 520, y: 112, w: 24, h: 280 },
+                    { x: 640, y: 420, w: 280, h: 24 },
+                    { x: 360, y: 320, w: 24, h: 200 }
+                ]
+            }
+        ];
+
+        function clamp(value, min, max) {
+            return Math.min(Math.max(value, min), max);
+        }
+
+        function distance(a, b) {
+            return Math.hypot(a.x - b.x, a.y - b.y);
+        }
+
+        function createEnemy(type = 'grunt') {
+            const spawnEdges = [
+                { x: 40 + Math.random() * (W - 80), y: -32 },
+                { x: 40 + Math.random() * (W - 80), y: H + 32 },
+                { x: -32, y: 40 + Math.random() * (H - 80) },
+                { x: W + 32, y: 40 + Math.random() * (H - 80) }
+            ];
+            const pos = spawnEdges[Math.floor(Math.random() * spawnEdges.length)];
+            const level = levels[player.level];
+            const enemy = {
+                x: pos.x,
+                y: pos.y,
+                r: 14,
+                type,
+                speed: 90 + Math.random() * 30,
+                health: 40 + player.level * 10,
+                maxHealth: 40 + player.level * 10,
+                damage: 18,
+                color: '#e45f4d',
+                shootTimer: 0,
+                dashTimer: 0
+            };
+
+            if (type === 'runner') {
+                enemy.color = '#ffb94c';
+                enemy.speed = 150;
+                enemy.health = 28 + player.level * 8;
+                enemy.damage = 12;
+                enemy.r = 12;
+            }
+            if (type === 'tank') {
+                enemy.color = '#5a9aff';
+                enemy.speed = 52;
+                enemy.health = 100 + player.level * 16;
+                enemy.damage = 28;
+                enemy.r = 18;
+            }
+            if (type === 'sniper') {
+                enemy.color = '#d26cff';
+                enemy.speed = 62;
+                enemy.health = 40 + player.level * 10;
+                enemy.damage = 22;
+                enemy.r = 14;
+                enemy.shootTimer = randomRange(0.6, 1.4);
+            }
+            if (type === 'boss') {
+                enemy.color = '#ff5f5f';
+                enemy.speed = 55;
+                enemy.health = levels[player.level].bossHealth;
+                enemy.maxHealth = levels[player.level].bossHealth;
+                enemy.damage = 32;
+                enemy.r = 26;
+                enemy.shootTimer = 1.3;
+            }
+            enemies.push(enemy);
+        }
+
+        function spawnEnemyType() {
+            const roll = Math.random();
+            if (roll < 0.12 && player.level >= 1) return 'tank';
+            if (roll < 0.28 && player.level >= 2) return 'sniper';
+            if (roll < 0.48) return 'runner';
+            return 'grunt';
+        }
+
+        function spawnLoot(x, y) {
+            const types = ['health', 'ammo', 'weapon', 'grenade', 'shield', 'timeSlow', 'homing'];
+            const kind = types[Math.floor(Math.random() * types.length)];
+            pickups.push({ x, y, r: 14, type: kind, life: 14 + Math.random() * 16, age: 0 });
+        }
+
+        function useGrenade() {
+            if (player.abilities.grenade.cooldown > 0 || player.abilities.grenade.ammo <= 0) return;
+            player.abilities.grenade.ammo -= 1;
+            player.abilities.grenade.cooldown = 4;
+            grenades.push({
+                x: player.x + Math.cos(player.angle) * 20,
+                y: player.y + Math.sin(player.angle) * 20,
+                vx: Math.cos(player.angle) * 300,
+                vy: Math.sin(player.angle) * 300,
+                r: 8,
+                life: 1.5,
+                damage: player.abilities.grenade.damage,
+                radius: player.abilities.grenade.radius
+            });
+            playSound(200, 0.12, 'triangle', 0.2);
+        }
+
+        function useShield() {
+            if (player.abilities.shield.cooldown > 0) return;
+            player.abilities.shield.active = true;
+            player.abilities.shield.timer = player.abilities.shield.duration;
+            player.abilities.shield.cooldown = 8;
+            playSound(400, 0.18, 'sine', 0.22);
+        }
+
+        function useTimeSlow() {
+            if (player.abilities.timeSlow.cooldown > 0) return;
+            levelState.timeSlow = true;
+            player.abilities.timeSlow.active = true;
+            player.abilities.timeSlow.timer = player.abilities.timeSlow.duration;
+            player.abilities.timeSlow.cooldown = 12;
+            playSound(300, 0.25, 'sawtooth', 0.15);
+        }
+
+        function useTeleport() {
+            if (player.abilities.teleport.cooldown > 0) return;
+            const dist = player.abilities.teleport.range;
+            const newX = player.x + Math.cos(player.angle) * dist;
+            const newY = player.y + Math.sin(player.angle) * dist;
+            player.x = clamp(newX, player.r, W - player.r);
+            player.y = clamp(newY, player.r, H - player.r);
+            resolveCollision(player);
+            player.abilities.teleport.cooldown = 6;
+            emitHit(player.x, player.y, 8, '#aaffff');
+            playSound(600, 0.1, 'square', 0.18);
+        }
+
+        function useHoming() {
+            if (player.abilities.homing.ammo <= 0 || player.abilities.homing.cooldown > 0) return;
+            player.abilities.homing.ammo -= 1;
+            player.abilities.homing.cooldown = 6;
+            const angle = player.angle;
+            homingMissiles.push({
+                x: player.x + Math.cos(angle) * 20,
+                y: player.y + Math.sin(angle) * 20,
+                vx: Math.cos(angle) * player.abilities.homing.speed,
+                vy: Math.sin(angle) * player.abilities.homing.speed,
+                r: 4,
+                damage: player.abilities.homing.damage,
+                life: 4,
+                target: null
+            });
+            playSound(800, 0.12, 'sawtooth', 0.15);
+        }
+
+        function resetGame() {
+            // Reset player
+            player.health = player.maxHealth;
+            player.score = 0;
+            player.kills = 0;
+            player.level = 0;
+            player.levelProgress = 0;
+            player.activeWeapon = 0;
+            player.dashing = false;
+            player.dashTimer = 0;
+            player.dashCharge = player.dashAvailable;
+            player.dashCooldown = 0;
+            player.reloading = false;
+            player.reloadTimer = 0;
+            player.abilities.grenade.ammo = 3;
+            player.abilities.grenade.cooldown = 0;
+            player.abilities.shield.active = false;
+            player.abilities.shield.timer = 0;
+            player.abilities.shield.cooldown = 0;
+            player.abilities.timeSlow.active = false;
+            player.abilities.timeSlow.timer = 0;
+            player.abilities.timeSlow.cooldown = 0;
+            player.abilities.teleport.cooldown = 0;
+            player.abilities.homing.ammo = 2;
+            player.abilities.homing.cooldown = 0;
+
+            // Reset weapons
+            weapons.forEach(weapon => {
+                weapon.clip = weapon.clipSize;
+                weapon.reserve = weapon.maxReserve;
+            });
+
+            // Clear arrays
+            bullets.length = 0;
+            enemyBullets.length = 0;
+            enemies.length = 0;
+            pickups.length = 0;
+            particles.length = 0;
+            grenades.length = 0;
+            explosions.length = 0;
+            homingMissiles.length = 0;
+
+            // Reset level state
+            levelState.wave = 1;
+            levelState.timer = 0;
+            levelState.bossActive = false;
+            levelState.text = '';
+            levelState.timeSlow = false;
+
+            // Set initial level
+            setLevel(0);
+        }
+
+        function resolveCollision(entity) {
+            obstacles.forEach(obs => {
+                const closestX = clamp(entity.x, obs.x, obs.x + obs.w);
+                const closestY = clamp(entity.y, obs.y, obs.y + obs.h);
+                const dx = entity.x - closestX;
+                const dy = entity.y - closestY;
+                const dist = Math.hypot(dx, dy);
+                if (dist < entity.r + 1 && dist > 0) {
+                    const overlap = entity.r + 1 - dist;
+                    const nx = dx / dist;
+                    const ny = dy / dist;
+                    entity.x += nx * overlap;
+                    entity.y += ny * overlap;
+                }
+            });
+        }
+
+        function setLevel(index) {
+            player.level = clamp(index, 0, levels.length - 1);
+            player.levelProgress = 0;
+            levelState.wave = 1;
+            levelState.timer = 0;
+            levelState.bossActive = false;
+            levelState.text = `Level ${player.level + 1}: ${levels[player.level].name}`;
+            obstacles = levels[player.level].obstacles.map(obs => ({ ...obs }));
+            enemies.length = 0;
+            enemyBullets.length = 0;
+            pickups.length = 0;
+            particles.length = 0;
+            player.health = player.maxHealth;
+            player.x = W / 2;
+            player.y = H / 2;
+            player.dashCharge = player.dashAvailable;
+            player.dashCooldown = 0;
+            spawnWave();
+        }
+
+        function spawnWave() {
+            const level = levels[player.level];
+            if (player.levelProgress >= level.enemyCount) {
+                if (!levelState.bossActive) {
+                    levelState.bossActive = true;
+                    levelState.text = 'BOSS APPROACHING!';
+                    createEnemy('boss');
+                    playSound(140, 0.25, 'square', 0.2);
+                }
+                return;
+            }
+            const count = Math.min(level.waveSize, level.enemyCount - player.levelProgress);
+            for (let i = 0; i < count; i += 1) {
+                createEnemy(spawnEnemyType());
+            }
+            levelState.text = `Wave ${levelState.wave} / ${Math.ceil(level.enemyCount / level.waveSize)}`;
+            levelState.wave += 1;
+            player.levelProgress += count;
+        }
+
+        function pickupLoot(pickup) {
+            if (pickup.type === 'health') {
+                player.health = Math.min(player.maxHealth, player.health + 36);
+                levelState.text = 'Health restored';
+                playSound(720, 0.14, 'triangle', 0.18);
+            } else if (pickup.type === 'ammo') {
+                weapons.forEach(weapon => { weapon.reserve += Math.ceil(weapon.clipSize * 0.7); });
+                levelState.text = 'Ammo crate';
+                playSound(900, 0.1, 'triangle', 0.16);
+            } else if (pickup.type === 'weapon') {
+                player.activeWeapon = (player.activeWeapon + 1) % weapons.length;
+                weapons[player.activeWeapon].clip = Math.min(weapons[player.activeWeapon].clip + 4, weapons[player.activeWeapon].clipSize);
+                levelState.text = `${weapons[player.activeWeapon].name} acquired`;
+                playSound(520, 0.14, 'square', 0.2);
+            } else if (pickup.type === 'grenade') {
+                player.abilities.grenade.ammo += 3;
+                levelState.text = 'Grenades +3';
+                playSound(800, 0.12, 'triangle', 0.16);
+            } else if (pickup.type === 'shield') {
+                player.abilities.shield.cooldown = Math.max(0, player.abilities.shield.cooldown - 2);
+                levelState.text = 'Shield ready';
+                playSound(1000, 0.1, 'triangle', 0.16);
+            } else if (pickup.type === 'timeSlow') {
+                player.abilities.timeSlow.cooldown = Math.max(0, player.abilities.timeSlow.cooldown - 3);
+                levelState.text = 'Time slow ready';
+                playSound(1200, 0.08, 'triangle', 0.16);
+            } else if (pickup.type === 'homing') {
+                player.abilities.homing.ammo += 2;
+                levelState.text = 'Homing missiles +2';
+                playSound(1400, 0.1, 'triangle', 0.16);
+            }
+        }
+
+        function createParticle(x, y, color, vx, vy, life) {
+            particles.push({ x, y, color, vx, vy, life, maxLife: life });
+        }
+
+        function emitHit(x, y, amount, color) {
+            for (let i = 0; i < amount; i += 1) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = randomRange(30, 120);
+                createParticle(x, y, color, Math.cos(angle) * speed, Math.sin(angle) * speed, randomRange(0.35, 0.7));
+            }
+        }
+
+        function shoot() {
+            const weapon = weapons[player.activeWeapon];
+            if (player.reloading || weapon.clip <= 0) {
+                if (!player.reloading && weapon.reserve > 0 && weapon.clip < weapon.clipSize) {
+                    player.reloading = true;
+                    player.reloadTimer = weapon.reload;
+                    levelState.text = `${weapon.name} reloading`;
+                    playSound(180, 0.18, 'triangle', 0.1);
+                }
+                return;
+            }
+            player.fireCooldown = weapon.fireRate;
+            for (let i = 0; i < weapon.pattern; i += 1) {
+                const angleOffset = weapon.pattern === 1 ? 0 : (i - (weapon.pattern - 1) / 2) * weapon.spread;
+                const angle = player.angle + angleOffset + randomRange(-weapon.spread * 0.14, weapon.spread * 0.14);
+                bullets.push({
+                    x: player.x + Math.cos(angle) * (player.r + 10),
+                    y: player.y + Math.sin(angle) * (player.r + 10),
+                    vx: Math.cos(angle) * weapon.speed,
+                    vy: Math.sin(angle) * weapon.speed,
+                    r: 4,
+                    damage: weapon.damage,
+                    color: '#ffeb92',
+                    life: 1.5
+                });
+            }
+            weapon.clip -= 1;
+            playSound(820 - player.activeWeapon * 120, 0.08, 'square', 0.18);
+            createParticle(player.x + Math.cos(player.angle) * 18, player.y + Math.sin(player.angle) * 18, '#fffa93', Math.cos(player.angle) * 120, Math.sin(player.angle) * 120, 0.15);
+        }
+
+        function enemyShoot(enemy, target) {
+            const angle = Math.atan2(target.y - enemy.y, target.x - enemy.x);
+            enemyBullets.push({
+                x: enemy.x + Math.cos(angle) * (enemy.r + 8),
+                y: enemy.y + Math.sin(angle) * (enemy.r + 8),
+                vx: Math.cos(angle) * 360,
+                vy: Math.sin(angle) * 360,
+                r: 5,
+                damage: enemy.damage,
+                color: '#ff8f8f',
+                life: 2.2
+            });
+            playSound(220, 0.06, 'sine', 0.08);
+        }
+
+        function update(dt) {
+            if (player.health <= 0) {
+                hud.innerHTML = `GAME OVER <br>Score: ${player.score} <br>Reached: ${player.level + 1}/${levels.length} <br>Refresh to restart`;
+                return;
+            }
+
+            // Handle time slow
+            const effectiveDt = levelState.timeSlow ? dt * 0.3 : dt;
+
+            // Update abilities
+            player.abilities.grenade.cooldown = Math.max(0, player.abilities.grenade.cooldown - effectiveDt);
+            player.abilities.shield.cooldown = Math.max(0, player.abilities.shield.cooldown - effectiveDt);
+            player.abilities.timeSlow.cooldown = Math.max(0, player.abilities.timeSlow.cooldown - effectiveDt);
+            player.abilities.teleport.cooldown = Math.max(0, player.abilities.teleport.cooldown - effectiveDt);
+            player.abilities.homing.cooldown = Math.max(0, player.abilities.homing.cooldown - effectiveDt);
+
+            if (player.abilities.shield.active) {
+                player.abilities.shield.timer -= effectiveDt;
+                if (player.abilities.shield.timer <= 0) {
+                    player.abilities.shield.active = false;
+                }
+            }
+
+            if (player.abilities.timeSlow.active) {
+                player.abilities.timeSlow.timer -= effectiveDt;
+                if (player.abilities.timeSlow.timer <= 0) {
+                    player.abilities.timeSlow.active = false;
+                    levelState.timeSlow = false;
+                }
+            }
+
+            const speed = player.dashing ? player.speed * 1.9 : player.speed;
+            let vx = 0, vy = 0;
+            if (joystick.active) {
+                vx = joystick.x * speed * effectiveDt;
+                vy = joystick.y * speed * effectiveDt;
+            } else {
+                if (keys.w) vy -= speed * effectiveDt;
+                if (keys.s) vy += speed * effectiveDt;
+                if (keys.a) vx -= speed * effectiveDt;
+                if (keys.d) vx += speed * effectiveDt;
+            }
+            player.x += vx;
+            player.y += vy;
+
+            if (player.dashing) {
+                player.dashTimer -= effectiveDt;
+                if (player.dashTimer <= 0) {
+                    player.dashing = false;
+                }
+            }
+            if (player.dashCooldown > 0) {
+                player.dashCooldown -= effectiveDt;
+            } else if (player.dashCharge < player.dashAvailable) {
+                player.dashCharge = Math.min(player.dashCharge + effectiveDt * 0.65, player.dashAvailable);
+            }
+
+            player.x = clamp(player.x, player.r, W - player.r);
+            player.y = clamp(player.y, player.r, H - player.r);
+            resolveCollision(player);
+
+            if (joystick.active && (joystick.x !== 0 || joystick.y !== 0)) {
+                player.angle = Math.atan2(joystick.y, joystick.x);
+            } else {
+                player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+            }
+            player.fireCooldown -= effectiveDt;
+            if (player.reloading) {
+                player.reloadTimer -= effectiveDt;
+                if (player.reloadTimer <= 0) {
+                    const weapon = weapons[player.activeWeapon];
+                    const amount = Math.min(weapon.clipSize - weapon.clip, weapon.reserve);
+                    weapon.clip += amount;
+                    weapon.reserve -= amount;
+                    player.reloading = false;
+                    levelState.text = `${weapon.name} ready`;
+                }
+            }
+
+            if (mouse.down && player.fireCooldown <= 0) {
+                shoot();
+            }
+
+            // Update grenades
+            grenades.forEach((grenade, index) => {
+                grenade.x += grenade.vx * effectiveDt;
+                grenade.y += grenade.vy * effectiveDt;
+                grenade.life -= effectiveDt;
+                if (grenade.life <= 0) {
+                    explosions.push({
+                        x: grenade.x,
+                        y: grenade.y,
+                        radius: grenade.radius,
+                        damage: grenade.damage,
+                        life: 0.3
+                    });
+                    grenades.splice(index, 1);
+                }
+            });
+
+            // Update explosions
+            explosions.forEach((explosion, index) => {
+                explosion.life -= effectiveDt;
+                if (explosion.life <= 0) {
+                    explosions.splice(index, 1);
+                }
+            });
+
+            // Update homing missiles
+            homingMissiles.forEach((missile, index) => {
+                missile.life -= effectiveDt;
+                if (missile.life <= 0) {
+                    homingMissiles.splice(index, 1);
+                    return;
+                }
+                // Find target
+                if (!missile.target || distance(missile, missile.target) > 300) {
+                    let closest = null;
+                    let minDist = Infinity;
+                    enemies.forEach(enemy => {
+                        const dist = distance(missile, enemy);
+                        if (dist < minDist) {
+                            minDist = dist;
+                            closest = enemy;
+                        }
+                    });
+                    missile.target = closest;
+                }
+                if (missile.target) {
+                    const dx = missile.target.x - missile.x;
+                    const dy = missile.target.y - missile.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist > 0) {
+                        const turnSpeed = 3 * effectiveDt;
+                        const targetAngle = Math.atan2(dy, dx);
+                        let angleDiff = targetAngle - Math.atan2(missile.vy, missile.vx);
+                        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                        while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                        const turn = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), turnSpeed);
+                        const currentAngle = Math.atan2(missile.vy, missile.vx) + turn;
+                        const speed = Math.hypot(missile.vx, missile.vy);
+                        missile.vx = Math.cos(currentAngle) * speed;
+                        missile.vy = Math.sin(currentAngle) * speed;
+                    }
+                }
+                missile.x += missile.vx * effectiveDt;
+                missile.y += missile.vy * effectiveDt;
+            });
+
+            for (let i = bullets.length - 1; i >= 0; i -= 1) {
+                const bullet = bullets[i];
+                bullet.x += bullet.vx * effectiveDt;
+                bullet.y += bullet.vy * effectiveDt;
+                bullet.life -= effectiveDt;
+                if (bullet.life <= 0 || bullet.x < -24 || bullet.x > W + 24 || bullet.y < -24 || bullet.y > H + 24) {
+                    bullets.splice(i, 1);
+                }
+            }
+
+            for (let i = enemyBullets.length - 1; i >= 0; i -= 1) {
+                const shot = enemyBullets[i];
+                shot.x += shot.vx * effectiveDt;
+                shot.y += shot.vy * effectiveDt;
+                shot.life -= effectiveDt;
+                if (shot.life <= 0 || shot.x < -24 || shot.x > W + 24 || shot.y < -24 || shot.y > H + 24) {
+                    enemyBullets.splice(i, 1);
+                }
+            }
+
+            for (let i = enemies.length - 1; i >= 0; i -= 1) {
+                const enemy = enemies[i];
+                const dx = player.x - enemy.x;
+                const dy = player.y - enemy.y;
+                const angle = Math.atan2(dy, dx);
+                const dist = Math.hypot(dx, dy);
+                let targetSpeed = enemy.speed;
+
+                if (enemy.type === 'runner') {
+                    if (enemy.dashTimer <= 0 && dist < 260) {
+                        enemy.dashTimer = 0.6;
+                    }
+                    if (enemy.dashTimer > 0) {
+                        enemy.dashTimer -= effectiveDt;
+                        targetSpeed *= 2.1;
+                    }
+                }
+                if (enemy.type === 'tank') {
+                    targetSpeed *= 0.7;
+                }
+
+                enemy.x += Math.cos(angle) * targetSpeed * effectiveDt;
+                enemy.y += Math.sin(angle) * targetSpeed * effectiveDt;
+                resolveCollision(enemy);
+
+                if (distance(enemy, player) < enemy.r + player.r) {
+                    if (!player.dashing && !player.abilities.shield.active) {
+                        player.health -= enemy.damage * effectiveDt * 0.64;
+                    }
+                }
+
+                if (enemy.type === 'sniper') {
+                    enemy.shootTimer -= effectiveDt;
+                    if (enemy.shootTimer <= 0) {
+                        enemy.shootTimer = randomRange(1.1, 1.8);
+                        enemyShoot(enemy, player);
+                    }
+                }
+                if (enemy.type === 'boss') {
+                    enemy.shootTimer -= effectiveDt;
+                    if (enemy.shootTimer <= 0) {
+                        enemy.shootTimer = 1.6;
+                        for (let j = 0; j < 3; j += 1) {
+                            enemyShoot(enemy, { x: player.x + randomRange(-40, 40), y: player.y + randomRange(-40, 40) });
+                        }
+                        playSound(320, 0.16, 'square', 0.12);
+                    }
+                }
+
+                // Check grenade explosions
+                explosions.forEach(explosion => {
+                    if (distance(explosion, enemy) < explosion.radius) {
+                        enemy.health -= explosion.damage;
+                        emitHit(enemy.x, enemy.y, 8, '#ffaa44');
+                    }
+                });
+
+                // Check homing missiles
+                homingMissiles.forEach((missile, mIndex) => {
+                    if (distance(missile, enemy) < missile.r + enemy.r) {
+                        enemy.health -= missile.damage;
+                        homingMissiles.splice(mIndex, 1);
+                        emitHit(enemy.x, enemy.y, 6, '#ff44ff');
+                    }
+                });
+
+                for (let j = bullets.length - 1; j >= 0; j -= 1) {
+                    const bullet = bullets[j];
+                    if (distance(bullet, enemy) < bullet.r + enemy.r) {
+                        enemy.health -= bullet.damage;
+                        bullets.splice(j, 1);
+                        emitHit(bullet.x, bullet.y, 5, '#ffeb92');
+                        if (enemy.health <= 0) {
+                            player.score += enemy.type === 'boss' ? 950 : enemy.type === 'tank' ? 160 : enemy.type === 'runner' ? 110 : 105;
+                            player.kills += 1;
+                            if (Math.random() < 0.45 && enemy.type !== 'boss') {
+                                spawnLoot(enemy.x, enemy.y);
+                            }
+                            if (enemy.type === 'boss') {
+                                levelState.text = 'BOSS DOWN! Advancing...';
+                                setTimeout(() => {
+                                    if (player.level < levels.length - 1) {
+                                        setLevel(player.level + 1);
+                                    } else {
+                                        levelState.text = 'VICTORY! Refresh to play again';
+                                    }
+                                }, 1800);
+                                levelState.bossActive = false;
+                            }
+                            enemies.splice(i, 1);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            for (let i = pickups.length - 1; i >= 0; i -= 1) {
+                const pickup = pickups[i];
+                pickup.age += effectiveDt;
+                pickup.life -= effectiveDt;
+                if (pickup.life <= 0) {
+                    pickups.splice(i, 1);
+                    continue;
+                }
+                if (distance(pickup, player) < pickup.r + player.r) {
+                    pickupLoot(pickup);
+                    pickups.splice(i, 1);
+                }
+            }
+
+            // Check grenade explosions on player
+            explosions.forEach(explosion => {
+                if (distance(explosion, player) < explosion.radius && !player.abilities.shield.active) {
+                    player.health -= explosion.damage * 0.5;
+                    emitHit(player.x, player.y, 10, '#ff4444');
+                }
+            });
+
+            for (let i = enemyBullets.length - 1; i >= 0; i -= 1) {
+                const shot = enemyBullets[i];
+                if (distance(shot, player) < shot.r + player.r) {
+                    if (!player.dashing && !player.abilities.shield.active) {
+                        player.health -= shot.damage * 0.9;
+                        playSound(220, 0.09, 'sine', 0.12);
+                    }
+                    enemyBullets.splice(i, 1);
+                    emitHit(player.x, player.y, 6, '#ff8f8f');
+                    continue;
+                }
+            }
+
+            if (!levelState.bossActive && enemies.length === 0 && player.levelProgress < levels[player.level].enemyCount) {
+                levelState.timer -= effectiveDt;
+                if (levelState.timer <= 0) {
+                    spawnWave();
+                    levelState.timer = 2.2;
+                }
+            }
+
+            const weapon = weapons[player.activeWeapon];
+            const dashText = player.dashCharge >= 1 ? 'READY' : 'RECHARGING';
+            hud.innerHTML = `Health: ${Math.max(0, Math.round(player.health))}/${player.maxHealth} ` +
+                `Score: ${player.score} ` +
+                `Kills: ${player.kills} ` +
+                `Mission: ${player.level + 1}/${levels.length} ` +
+                `Weapon: ${weapon.name} ${weapon.clip}/${weapon.reserve}` +
+                `<br>${levelState.text} • Dash: ${player.dashCharge.toFixed(1)} (${dashText})` +
+                `<br>Grenades: ${player.abilities.grenade.ammo} • Shield: ${player.abilities.shield.active ? 'ACTIVE' : player.abilities.shield.cooldown.toFixed(1)} • Time Slow: ${player.abilities.timeSlow.cooldown.toFixed(1)} • Teleport: ${player.abilities.teleport.cooldown.toFixed(1)} • Homing: ${player.abilities.homing.ammo}`;
+        }
+
+        function draw() {
+            const level = levels[player.level];
+            ctx.fillStyle = level.background;
+            ctx.fillRect(0, 0, W, H);
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x <= W; x += 72) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, H);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= H; y += 72) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(W, y);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            obstacles.forEach(obs => {
+                ctx.fillStyle = '#2f3744';
+                ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+                ctx.strokeStyle = '#5ab';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
+            });
+
+            pickups.forEach(pickup => {
+                const pulse = 1 + Math.sin(pickup.age * 6) * 0.08;
+                ctx.beginPath();
+                ctx.arc(pickup.x, pickup.y, pickup.r * pulse, 0, Math.PI * 2);
+                if (pickup.type === 'health') ctx.fillStyle = '#74ff9e';
+                if (pickup.type === 'ammo') ctx.fillStyle = '#85c7ff';
+                if (pickup.type === 'weapon') ctx.fillStyle = '#ff7ed1';
+                if (pickup.type === 'grenade') ctx.fillStyle = '#ff4444';
+                if (pickup.type === 'shield') ctx.fillStyle = '#00c8ff';
+                if (pickup.type === 'timeSlow') ctx.fillStyle = '#ffff44';
+                if (pickup.type === 'homing') ctx.fillStyle = '#ff44ff';
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+
+            bullets.forEach(bullet => {
+                ctx.fillStyle = bullet.color;
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, bullet.r, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            enemyBullets.forEach(shot => {
+                ctx.fillStyle = shot.color;
+                ctx.beginPath();
+                ctx.arc(shot.x, shot.y, shot.r, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            grenades.forEach(grenade => {
+                ctx.fillStyle = '#ff4444';
+                ctx.beginPath();
+                ctx.arc(grenade.x, grenade.y, grenade.r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+
+            explosions.forEach(explosion => {
+                const alpha = explosion.life / 0.3;
+                ctx.strokeStyle = `rgba(255,100,0,${alpha})`;
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(explosion.x, explosion.y, explosion.radius, 0, Math.PI * 2);
+                ctx.stroke();
+            });
+
+            enemies.forEach(enemy => {
+                ctx.fillStyle = enemy.color;
+                ctx.beginPath();
+                ctx.arc(enemy.x, enemy.y, enemy.r, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#111';
+                ctx.fillRect(enemy.x - 20, enemy.y - enemy.r - 14, 40, 7);
+                ctx.fillStyle = '#5cff7f';
+                ctx.fillRect(enemy.x - 20, enemy.y - enemy.r - 14, 40 * (enemy.health / enemy.maxHealth), 7);
+                if (enemy.type === 'boss') {
+                    ctx.strokeStyle = 'rgba(255,95,95,0.55)';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.arc(enemy.x, enemy.y, enemy.r + 8, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            });
+
+            particles.forEach((particle, index) => {
+                particle.x += particle.vx * (1 / 60);
+                particle.y += particle.vy * (1 / 60);
+                particle.life -= 1 / 60;
+                const alpha = particle.life / particle.maxLife;
+                if (particle.life <= 0) {
+                    particles.splice(index, 1);
+                    return;
+                }
+                ctx.fillStyle = particle.color;
+                ctx.globalAlpha = alpha;
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            });
+
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.rotate(player.angle);
+            ctx.fillStyle = weapons[player.activeWeapon].color;
+            ctx.beginPath();
+            ctx.moveTo(18, 0);
+            ctx.lineTo(-10, 12);
+            ctx.lineTo(-4, 0);
+            ctx.lineTo(-10, -12);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(player.x, player.y);
+            ctx.lineTo(player.x + Math.cos(player.angle) * 28, player.y + Math.sin(player.angle) * 28);
+            ctx.stroke();
+
+            if (player.dashing) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, player.r + 6, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            if (player.abilities.shield.active) {
+                ctx.strokeStyle = 'rgba(0,200,255,0.8)';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, player.r + 12, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px Arial';
+            ctx.fillText(`Mission: ${level.name}`, 16, H - 18);
+        }
+
+        let lastTime = performance.now();
+        function loop(timestamp) {
+            const dt = Math.min(0.035, (timestamp - lastTime) / 1000);
+            lastTime = timestamp;
+            update(dt);
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        canvas.addEventListener('mousemove', event => {
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = event.clientX - rect.left;
+            mouse.y = event.clientY - rect.top;
+        });
+        canvas.addEventListener('mousedown', () => {
+            mouse.down = true;
+            unlockAudio();
+        });
+        window.addEventListener('mouseup', () => mouse.down = false);
+
+        window.addEventListener('keydown', event => {
+            if (event.key === 'w' || event.key === 'W') keys.w = true;
+            if (event.key === 'a' || event.key === 'A') keys.a = true;
+            if (event.key === 's' || event.key === 'S') keys.s = true;
+            if (event.key === 'd' || event.key === 'D') keys.d = true;
+            if (event.key === '1') player.activeWeapon = 0;
+            if (event.key === '2') player.activeWeapon = 1;
+            if (event.key === '3') player.activeWeapon = 2;
+            if (event.key === '4') player.activeWeapon = 3;
+            if (event.key === 'r' || event.key === 'R') {
+                const weapon = weapons[player.activeWeapon];
+                if (!player.reloading && weapon.reserve > 0 && weapon.clip < weapon.clipSize) {
+                    player.reloading = true;
+                    player.reloadTimer = weapon.reload;
+                    levelState.text = `${weapon.name} reloading`;
+                    playSound(180, 0.18, 'triangle', 0.1);
+                }
+            }
+            if (event.key === 'q' || event.key === 'Q') {
+                if (!player.dashing && player.dashCharge >= 1) {
+                    player.dashing = true;
+                    player.dashTimer = 0.18;
+                    player.dashCharge -= 1;
+                    player.dashCooldown = 1.8;
+                    playSound(540, 0.14, 'sine', 0.18);
+                }
+            }
+            if (event.key === 'e' || event.key === 'E') {
+                useGrenade();
+            }
+            if (event.key === 'f' || event.key === 'F') {
+                useShield();
+            }
+            if (event.key === 'g' || event.key === 'G') {
+                useTimeSlow();
+            }
+            if (event.key === 'v' || event.key === 'V') {
+                useTeleport();
+            }
+            if (event.key === 'c' || event.key === 'C') {
+                useHoming();
+            }
+        });
+
+        window.addEventListener('keyup', event => {
+            if (event.key === 'w' || event.key === 'W') keys.w = false;
+            if (event.key === 'a' || event.key === 'A') keys.a = false;
+            if (event.key === 's' || event.key === 'S') keys.s = false;
+            if (event.key === 'd' || event.key === 'D') keys.d = false;
+        });
+
+        document.getElementById('repeatButton').addEventListener('click', resetGame);
+
+        function updateJoystickHandle() {
+            const maxDist = 30;
+            const dist = Math.sqrt(joystick.x ** 2 + joystick.y ** 2);
+            const clampedDist = Math.min(dist, 1) * maxDist;
+            const angle = Math.atan2(joystick.y, joystick.x);
+            joystickHandle.style.left = 30 + Math.cos(angle) * clampedDist + 'px';
+            joystickHandle.style.top = 30 + Math.sin(angle) * clampedDist + 'px';
+        }
+
+        joystickBase.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            joystick.active = true;
+            const rect = joystickBase.getBoundingClientRect();
+            joystick.baseX = rect.left + rect.width / 2;
+            joystick.baseY = rect.top + rect.height / 2;
+            const touch = e.touches[0];
+            joystick.x = (touch.clientX - joystick.baseX) / 50;
+            joystick.y = (touch.clientY - joystick.baseY) / 50;
+            const dist = Math.sqrt(joystick.x ** 2 + joystick.y ** 2);
+            if (dist > 1) {
+                joystick.x /= dist;
+                joystick.y /= dist;
+            }
+            updateJoystickHandle();
+        });
+
+        joystickBase.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!joystick.active) return;
+            const touch = e.touches[0];
+            joystick.x = (touch.clientX - joystick.baseX) / 50;
+            joystick.y = (touch.clientY - joystick.baseY) / 50;
+            const dist = Math.sqrt(joystick.x ** 2 + joystick.y ** 2);
+            if (dist > 1) {
+                joystick.x /= dist;
+                joystick.y /= dist;
+            }
+            updateJoystickHandle();
+        });
+
+        joystickBase.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            joystick.active = false;
+            joystick.x = 0;
+            joystick.y = 0;
+            updateJoystickHandle();
+        });
+
+        shootButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            mouse.down = true;
+        });
+
+        shootButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            mouse.down = false;
+        });
+
+        grenadeBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            useGrenade();
+        });
+
+        shieldBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            useShield();
+        });
+
+        timeSlowBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            useTimeSlow();
+        });
+
+        teleportBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            useTeleport();
+        });
+
+        homingBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            useHoming();
+        });
+
+        setLevel(0);
+        loop(performance.now());
+    </script>
+</body>
+</html>
