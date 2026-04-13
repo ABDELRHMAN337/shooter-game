@@ -1238,7 +1238,6 @@
             const rect = canvas.getBoundingClientRect();
             mouse.x = touch.clientX - rect.left;
             mouse.y = touch.clientY - rect.top;
-            mouse.down = true;
         });
 
         canvas.addEventListener('touchend', (e) => {
