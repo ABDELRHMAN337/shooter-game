@@ -124,6 +124,62 @@
         #time-slow-btn { bottom: 240px; }
         #teleport-btn { bottom: 310px; }
         #homing-btn { bottom: 380px; }
+        #weapon-buttons {
+            position: fixed;
+            bottom: 20px;
+            left: 140px;
+            display: flex;
+            gap: 10px;
+            z-index: 20;
+        }
+        .weapon-btn {
+            width: 40px;
+            height: 40px;
+            background: rgba(100,100,100,0.5);
+            border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            touch-action: none;
+        }
+        .weapon-btn.active {
+            background: rgba(100,200,100,0.8);
+        }
+        .weapon-btn:active {
+            background: rgba(150,150,150,0.8);
+        }
+        #reload-btn {
+            width: 60px;
+            height: 40px;
+            background: rgba(200,100,100,0.5);
+            border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 8px;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            touch-action: none;
+        }
+        #reload-btn:active {
+            background: rgba(200,100,100,0.8);
+        }
+        #dash-btn {
+            width: 60px;
+            height: 40px;
+            background: rgba(100,100,200,0.5);
+            border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 8px;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            touch-action: none;
+        }
+        #dash-btn:active {
+            background: rgba(100,100,200,0.8);
+        }
     </style>
     </style>
 </head>
@@ -149,6 +205,14 @@
             <div id="joystick-handle"></div>
         </div>
     </div>
+    <div id="weapon-buttons">
+        <button id="weapon1" class="weapon-btn">1</button>
+        <button id="weapon2" class="weapon-btn">2</button>
+        <button id="weapon3" class="weapon-btn">3</button>
+        <button id="weapon4" class="weapon-btn">4</button>
+        <button id="reload-btn">Reload</button>
+        <button id="dash-btn">Dash</button>
+    </div>
     <button id="shoot-button">SHOOT</button>
     <button id="grenade-btn" class="skill-button">E<br>Grenade</button>
     <button id="shield-btn" class="skill-button">F<br>Shield</button>
@@ -170,6 +234,12 @@
         const timeSlowBtn = document.getElementById('time-slow-btn');
         const teleportBtn = document.getElementById('teleport-btn');
         const homingBtn = document.getElementById('homing-btn');
+        const weapon1Btn = document.getElementById('weapon1');
+        const weapon2Btn = document.getElementById('weapon2');
+        const weapon3Btn = document.getElementById('weapon3');
+        const weapon4Btn = document.getElementById('weapon4');
+        const reloadBtn = document.getElementById('reload-btn');
+        const dashBtn = document.getElementById('dash-btn');
 
         const audio = { context: null, unlocked: false };
         function unlockAudio() {
@@ -1154,16 +1224,27 @@
             requestAnimationFrame(loop);
         }
 
-        canvas.addEventListener('mousemove', event => {
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
             const rect = canvas.getBoundingClientRect();
-            mouse.x = event.clientX - rect.left;
-            mouse.y = event.clientY - rect.top;
+            mouse.x = touch.clientX - rect.left;
+            mouse.y = touch.clientY - rect.top;
         });
-        canvas.addEventListener('mousedown', () => {
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = touch.clientX - rect.left;
+            mouse.y = touch.clientY - rect.top;
             mouse.down = true;
-            unlockAudio();
         });
-        window.addEventListener('mouseup', () => mouse.down = false);
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            mouse.down = false;
+        });
 
         window.addEventListener('keydown', event => {
             if (event.key === 'w' || event.key === 'W') keys.w = true;
@@ -1225,6 +1306,16 @@
             const angle = Math.atan2(joystick.y, joystick.x);
             joystickHandle.style.left = 30 + Math.cos(angle) * clampedDist + 'px';
             joystickHandle.style.top = 30 + Math.sin(angle) * clampedDist + 'px';
+        }
+
+        function updateWeaponButtons() {
+            document.querySelectorAll('.weapon-btn').forEach((btn, i) => {
+                if (i === player.activeWeapon) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
         }
 
         joystickBase.addEventListener('touchstart', (e) => {
@@ -1301,7 +1392,54 @@
             useHoming();
         });
 
+        weapon1Btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            player.activeWeapon = 0;
+            updateWeaponButtons();
+        });
+
+        weapon2Btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            player.activeWeapon = 1;
+            updateWeaponButtons();
+        });
+
+        weapon3Btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            player.activeWeapon = 2;
+            updateWeaponButtons();
+        });
+
+        weapon4Btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            player.activeWeapon = 3;
+            updateWeaponButtons();
+        });
+
+        reloadBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const weapon = weapons[player.activeWeapon];
+            if (!player.reloading && weapon.reserve > 0 && weapon.clip < weapon.clipSize) {
+                player.reloading = true;
+                player.reloadTimer = weapon.reload;
+                levelState.text = `${weapon.name} reloading`;
+                playSound(180, 0.18, 'triangle', 0.1);
+            }
+        });
+
+        dashBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!player.dashing && player.dashCharge >= 1) {
+                player.dashing = true;
+                player.dashTimer = 0.18;
+                player.dashCharge -= 1;
+                player.dashCooldown = 1.8;
+                playSound(540, 0.14, 'sine', 0.18);
+            }
+        });
+
         setLevel(0);
+        updateWeaponButtons();
         loop(performance.now());
     </script>
 </body>
